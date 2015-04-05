@@ -1,0 +1,1149 @@
+<!doctype html>
+<html lang="en">
+
+	<head>
+		<meta charset="utf-8">
+
+		<title>JavaScript Transducers</title>
+
+		<meta name="description" content="A framework for easily creating beautiful presentations using HTML">
+		<meta name="author" content="Hakim El Hattab">
+
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+
+		<link rel="stylesheet" href="css/reveal.css">
+		<link rel="stylesheet" href="css/theme/black.css" id="theme">
+
+		<!-- Code syntax highlighting -->
+		<link rel="stylesheet" href="lib/css/zenburn.css">
+
+		<!-- Printing and PDF exports -->
+		<script>
+			var link = document.createElement( 'link' );
+			link.rel = 'stylesheet';
+			link.type = 'text/css';
+			link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+			document.getElementsByTagName( 'head' )[0].appendChild( link );
+		</script>
+
+		<!--[if lt IE 9]>
+		<script src="lib/js/html5shiv.js"></script>
+		<![endif]-->
+	</head>
+
+	<body>
+
+		<div class="reveal">
+
+			<!-- Any section element inside of this container is displayed as a slide -->
+			<div class="slides">
+				<section data-markdown>
+					<script type="text/template">
+						# JavaScript Transducers
+
+						by **Matias Volpe**
+
+						@matvolpe
+
+						<a href="http://ar.linkedin.com/in/matiasvolpe">ar.linkedin.com/in/matiasvolpe</a>
+						<br/>
+						https://github.com/kratico/jsconf-uy-2015
+
+					</script>
+				</section>
+				<section>
+					<blockquote>
+						Logic will get you from A to B.
+						<br/>
+						Imagination will take you everywhere.
+					</blockquote>
+					<p class="fragment">Albert Einstein</p>
+				</section>
+				<section>
+					<h2>Problem</h2>
+					<ul>
+						<li class="fragment">
+							I want to reuse data transformation logic without having to re-implement the transformation process for each data-type
+						</li>
+						<li class="fragment">
+							And I want it to be fast
+						</li>
+						<li class="fragment">
+							And I want it to be efficient
+						</li>
+					</ul>
+				</section>
+				<section data-markdown>
+					<script type="text/template">
+						## What are transducers?
+
+						Transducers are a powerful and **composable** way to build algorithmic
+						**transformations** that you can **reuse** in many **contexts**
+
+					</script>
+				</section>
+				<section data-markdown>
+					<script type="text/template">
+						## What are transducers?
+
+						* Transducers are composable algorithmic transformations.
+						* They are independent from the context of their input and output
+						sources and specify only the essence of the transformation in
+						terms of an individual element.
+						* Because transducers are decoupled from
+						input or output sources, they can be used in many different
+						processes - collections, streams, channels, observables, etc.
+						* Transducers compose directly, without awareness of input or
+						creation of intermediate aggregates.
+
+					</script>
+				</section>
+
+				<section>
+
+				<section>
+					<h2>Benchmark</h2>
+					<pre>
+						<code class="javascript">
+input.map(addTen)
+  .map(double)
+  .filter(multipleOfFive)
+  .filter(even);
+
+_(input)
+  .map(addTen)
+  .map(double)
+  .filter(multipleOfFive)
+  .filter(even)
+  .value();
+						</code>
+					</pre>
+				</section>
+				<section>
+					<h2>Benchmark</h2>
+					<pre>
+						<code class="javascript">
+transduce(
+  // Transducer
+  compose(
+    map(addTen),
+    map(double),
+    filter(multipleOfFive),
+    filter(even)
+  ),
+  append,
+  [],
+  input
+);
+						</code>
+					</pre>
+				</section>
+				<section>
+					<h2>Benchmark</h2>
+					<img src="images/benchmark.png"></img>
+					<small>http://jlongster.com/Transducers.js-Round-2-with-Benchmarks</small>
+				</section>
+
+				<section data-markdown>
+					## Benchmark
+
+					```
+					// Intermediate allocations
+					var gArr = arr.map(g);
+					// [g(a1), g(a2),...]
+					var fgArr = gArr.map(f);
+					// [f(ga1), f(ga2),...]
+
+					// No intermediate allocations
+					var fg = compose(f, g);
+					var fgArr = arr.map(fg);
+					// [fg(a1), fg(a2),...]
+
+					// How can I compose filter, take, drop,...?
+					```
+				</section>
+
+				</section>
+
+				<section data-markdown>
+					<script type="text/template">
+						## Transduce
+
+						> transduce = transform + reduce
+
+						* The word `transduce` is just a combination of `transform` and `reduce`.
+						* The `reduce` function is the base transformation; any other
+						transformation can be expressed in terms of it (map, filter, etc).
+
+					</script>
+				</section>
+
+				<section data-markdown>
+					<script type="text/template">
+						## Array.prototype.reduce()
+
+						The `reduce()` method applies a function against an accumulator and
+						each value of the array (from left-to-right) has to reduce it to a
+						single value.
+
+					</script>
+				</section>
+
+				<section data-markdown>
+					<script type="text/template">
+						```
+						var input = [1, 2, 3, 4];
+
+						// The function passed to reduce is a reducing function
+						output = input.reduce(function(result, x) {
+							result.push(x + 1);
+							return result;
+						}, []);
+
+						// output = [ 2, 3, 4, 5 ]
+						```
+					</script>
+				</section>
+
+				<section data-markdown>
+					<script type="text/template">
+						## Reducing function
+
+						It is important to remember that `reduce`:
+
+						* Starts with an initial value
+						* Operates on one item at a time with the reducing function using
+							* The initial value for result in the first step
+							* The return value of the step function for result of next iteration
+						* Outputs a value using the last computed result.
+					</script>
+				</section>
+
+				<section data-markdown>
+					<script type="text/template">
+						## Transform
+
+						```
+						var input = [1, 2, 3, 4];
+
+						// The essence of the transformation
+						var plus1 = function(x) {
+							return x + 1;
+						}
+
+						output = input.reduce(function(result, x) {
+							result.push(plus1(x));
+							return result;
+						}, []);
+
+						// output = [ 2, 3, 4, 5 ]
+						```
+					</script>
+				</section>
+
+				<section data-markdown>
+					<script type="text/template">
+						## Separation of concerns
+
+						```
+						var input = [1, 2, 3, 4];
+
+						var plus1 = function(x) {
+							return x + 1;
+						};
+
+						var reduce = function(reducingFn, init, input) {
+							return input.reduce(reducingFn, init);
+						};
+
+						output = reduce(function(result, x) {
+							result.push(plus1(x));
+							return result;
+						}, [], input);
+
+						// output = [ 2, 3, 4, 5 ]
+
+						```
+					</script>
+				</section>
+
+				<section data-markdown>
+					<script type="text/template">
+						## Separation of concerns
+
+						```
+						var input = [1, 2, 3, 4];
+						var plus1 = function(x) {
+							return x + 1;
+						};
+						var reduce = function(reducingFn, init, input) {
+							return input.reduce(reducingFn, init);
+						};
+						var append = function(result, input) {
+							result.push(input);
+							return result;
+						};
+						output = reduce(function(result, x) {
+							return append(result, plus1(x));
+						}, [], input);
+
+						// output = [ 2, 3, 4, 5 ]
+
+						```
+					</script>
+				</section>
+
+				<section data-markdown>
+					<script type="text/template">
+						## Transduce
+
+						```
+						var input = [1, 2, 3, 4];
+						var plus1 = function(x) {
+							return x + 1;
+						};
+						var reduce = function(reducingFn, init, input) {
+							return input.reduce(reducingFn, init);
+						};
+						var append = function(result, input) {
+							result.push(input);
+							return result;
+						};
+						// plus1Transducer
+						output = transduce(plus1Transducer, append, [], input);
+						// output = [ 2, 3, 4, 5 ]
+
+						```
+					</script>
+				</section>
+
+				<section>
+					<h2>Transducer signature</h2>
+					<pre>
+						<code class="javascript">
+// A transducer takes a reducing function
+// and returns a new reducing function
+var transducer = function(reduceFn) {
+  returns function(result, input) {
+    // ... do sommething with reduceFn ...
+  }
+}
+						</code>
+					</pre>
+				</section>
+
+				<section>
+
+					<section data-markdown>
+						<script type="text/template">
+							## Map Transducer
+
+							```
+							// Map Transducer
+							var mapping = function(f) {
+								return function(reduce) {
+									return function(result, input) {
+										return reduce(result, f(input));
+									};
+								};
+							};
+
+							var transduce = function(xform, f, init, input) {
+								return reduce(xform(f), init, input);
+							};
+
+							output = transduce(mapping(plus1), append, [], input);
+
+							// output = [ 2, 3, 4, 5 ]
+
+							```
+						</script>
+					</section>
+
+					<section data-markdown>
+						<script type="text/template">
+							## Array.prototype.map
+
+							```
+							var input = [1, 2, 3, 4];
+							var plus1 = function(x) {
+								return x + 1;
+							}
+
+							var output = input.map(plus1);
+							// output = [ 2, 3, 4, 5 ]
+							```
+						</script>
+					</section>
+
+					<section data-markdown>
+						<script type="text/template">
+							## map(f, xs)
+
+							```
+							var input = [1, 2, 3, 4];
+							var plus1 = function(x) {
+								return x + 1;
+							};
+
+							var map = function(transform, xs) {
+								return xs.reduce(
+									// Reducing function
+									function(result, input) {
+										return append(result, transform(input));
+									},
+									[]);
+							}
+
+							var output = map(plus1, input);
+							// output = [ 2, 3, 4, 5 ]
+							```
+						</script>
+					</section>
+
+					<section data-markdown>
+						<script type="text/template">
+							## mapper(f)
+
+							```
+							var input = [1, 2, 3, 4];
+							var plus1 = function(x) {
+								return x + 1;
+							}
+
+							var mapper = function(transform) {
+								return function(result, input) {
+									return append(result, transform(input));
+								};
+							};
+
+							var output = input.reduce(mapper(plus1));
+							// output = [ 2, 3, 4, 5 ]
+							```
+						</script>
+					</section>
+
+					<section data-markdown>
+						<script type="text/template">
+							## mapping(f)
+
+							```
+							var input = [1, 2, 3, 4];
+							var plus1 = function(x) {
+								return x + 1;
+							};
+							// Map Transducer
+							var mapping = function(transform) {
+								return function(reduce) {
+									return function(result, input) {
+										return reduce(result, transform(input));
+									};
+								};
+							}
+
+							var output = input.reduce(mapping(plus1)(append), []);
+							// output = [ 2, 3, 4, 5 ]
+							```
+						</script>
+					</section>
+
+				</section>
+
+				<section>
+					<section data-markdown>
+						<script type="text/template">
+							## Filter Transducer
+
+							```
+							// Filter transducer
+							var filtering = function(predicate) {
+								return function(reduce) {
+									return function(result, input) {
+										return predicate(input) ?
+											reduce(result, input) :
+											result;
+									};
+								};
+							}
+							var input = [1, 2, 3, 4];
+							var isOdd = function(x) {
+								return x % 2 === 0;
+							};
+							var output = input.reduce(filtering(isOdd)(append), []);
+							// output = [2, 4]
+							```
+						</script>
+					</section>
+
+					<section data-markdown>
+						<script type="text/template">
+							## Array.prototype.filter
+
+							```
+							var input = [1, 2, 3, 4];
+							var isOdd = function(x) {
+								return x % 2 === 0;
+							};
+
+							var output = input.filter(isOdd);
+							// output = [2, 4]
+							```
+						</script>
+					</section>
+
+					<section data-markdown>
+						<script type="text/template">
+							## filter(predicate, xs)
+
+							```
+							var input = [1, 2, 3, 4];
+							var isOdd = function(x) {
+								return x % 2 === 0;
+							};
+							var filter = function(predicate, xs) {
+								return xs.reduce(
+									function(result, input) {
+										return predicate(input) ?
+											append(result, input) :
+											result
+									},
+									[]
+								);
+							};
+							var output = filter(isOdd, input);
+							// output = [2, 4]
+							```
+						</script>
+					</section>
+
+					<section data-markdown>
+						<script type="text/template">
+							## filterer(predicate)
+
+							```
+							var input = [1, 2, 3, 4];
+							var isOdd = function(x) {
+								return x % 2 === 0;
+							};
+							var filterer = function(predicate) {
+								return function(result, input) {
+									return predicate(input) ?
+										append(result, input) :
+										result;
+								}
+							};
+
+							var output = input.reduce(filterer(isOdd), []);
+							// output = [2, 4]
+							```
+						</script>
+					</section>
+
+					<section data-markdown>
+						<script type="text/template">
+							## filtering(predicate)
+
+							```
+							var input = [1, 2, 3, 4];
+							var isOdd = function(x) {
+								return x % 2 === 0;
+							};
+							// Filter transducer
+							var filtering = function(predicate) {
+								return function(reduce) {
+									return function(result, input) {
+										return predicate(input) ?
+											reduce(result, input) :
+											result;
+									};
+								};
+							}
+							var output = input.reduce(filtering(isOdd)(append), []);
+							// output = [2, 4]
+							```
+						</script>
+					</section>
+
+				</section>
+
+				<section>
+					<h1>Transducer Composition</h1>
+				</section>
+
+				<section data-markdown>
+					<script type="text/template">
+						## Composition
+
+						```
+						var input = [1, 2, 3, 4, 5];
+						// Could we use function composition?
+						var transducer = mapping(plus1)(
+							filtering(isOdd)
+						);
+
+						var output = transduce(transducer, append, [], input);
+						// output = [2, 4, 6]
+						```
+					</script>
+				</section>
+
+				<section data-markdown>
+					<script type="text/template">
+						## Function composition
+
+						> (f ∘ g)(x) = f(g(x))
+					</script>
+				</section>
+
+				<section data-markdown>
+					<script type="text/template">
+						## Compose
+
+						```
+						function compose() {
+							var fns = Array.prototype.slice.call(arguments);
+							return function(x) {
+								var value = x;
+								for (var i = fns.length - 1; i >= 0; i--) {
+									value = fns[i](value);
+								}
+								return value;
+							};
+						}
+						```
+
+					</script>
+				</section>
+
+				<section data-markdown>
+					<script type="text/template">
+						## Compose
+
+						```
+						var plus1 = function(x) {
+							return x + 1;
+						}
+
+						var plus2 = compose(plus1, plus1);
+
+						var output = plus2(2);
+						// output = 4
+						```
+					</script>
+				</section>
+
+				<section data-markdown>
+					<script type="text/template">
+						## Transducer composition
+
+						```
+						var input = [1, 2, 3, 4, 5];
+						var transducer = compose(
+							mapping(plus1),
+							filtering(isOdd)
+						);
+
+						var output = transduce(transducer, append, [], input);
+						// output = [2, 4, 6]
+						```
+					</script>
+				</section>
+
+				<section data-markdown>
+					<script type="text/template">
+						# Stateful transducers
+					</script>
+				</section>
+
+				<section data-markdown>
+					<script type="text/template">
+						## drop(n)
+
+						```
+						var input = [1, 2, 3, 4, 5];
+						var drop = function drop(n) {
+							return function(reduce) {
+								return function(result, input) {
+									if (n > 0) {
+										n--;
+									} else {
+										result = reduce(result, input);
+									}
+									return result;
+								};
+							};
+						};
+
+						var transducer = compose(
+							mapping(plus1),
+							filtering(isOdd),
+							drop(1)
+						);
+
+						var output = transduce(transducer, append, [], input);
+						// output = [4, 6]
+						```
+					</script>
+				</section>
+
+				<section>
+
+					<section data-markdown>
+						<script type="text/template">
+							## Early termination
+
+							```
+							var transduce = function(xform, f, init, input) {
+								return reduce(xform(f), init, input);
+							};
+							var reduce = function(reducingFn, init, input) {
+								// How can we break the reduce process?
+								return input.reduce(reducingFn, init);
+							};
+							```
+						</script>
+					</section>
+
+					<section data-markdown>
+						<script type="text/template">
+							## Early termination
+
+							```
+							var transduce = function(xform, f, init, input) {
+								return reduce(xform(f), init, input);
+							};
+							var reduce = function(reducingFn, init, input) {
+								return arrayReduce(reducingFn, init, input);
+							};
+							```
+						</script>
+					</section>
+
+					<section data-markdown>
+						<script type="text/template">
+							## Early termination
+
+							```
+							var arrayReduce = function(xf, init, array) {
+								var result = init,
+									i = 0,
+									length = array.length;
+
+								for (; i < length; i++) {
+									result = xf(result, array[i]);
+									if(isReduced(result)) {
+										result = deref(result);
+										break;
+									}
+								}
+
+								return result;
+							}
+							```
+						</script>
+					</section>
+
+					<section data-markdown>
+						<script type="text/template">
+							## Early termination
+							ES6 Iterator Protocol
+
+							```
+							var iterableReduce = function(xf, init, iterable)
+							  var result = init,
+									iter = iterable,
+									val = iter.next();
+
+								while(!val.done) {
+									result = xf(result, val.value);
+									if(isReduced(result)) {
+										result = deref(result);
+										break;
+									}
+									val = iter.next();
+								}
+
+								return result;
+							}
+							```
+						</script>
+					</section>
+
+					<section data-markdown>
+						<script type="text/template">
+							## Early termination
+
+							```
+							function reduced(value) {
+								return {
+									value: value,
+									__transducers_reduced__: true
+								};
+							}
+
+							function isReduced(value) {
+								return value && value.__transducers_reduced__;
+							}
+
+							function deref(reducedValue) {
+								return reducedValue.value;
+							}
+							```
+						</script>
+					</section>
+
+				</section>
+
+				<section data-markdown>
+					<script type="text/template">
+						## take(n)
+
+						```
+						var input = [1, 2, 3, 4, 5];
+						var take = function(n) {
+							return function(reduce) {
+								return function(result, input) {
+									result = reduce(result, input);
+									if (--n <= 0) {
+										result = reduced(result);
+									}
+									return result;
+								};
+							};
+						}
+
+						var transducer = compose(
+							mapping(plus1),
+							filtering(isOdd),
+							drop(1)
+							take(1)
+						);
+
+						var output = transduce(transducer, append, [], input);
+						// output = [4]
+						```
+					</script>
+				</section>
+
+				<section>
+					<h1>Examples</h1>
+				</section>
+
+				<section>
+
+					<section data-markdown>
+						## Array to Object
+						Counting #hashtags
+
+						```
+						var input = [
+							{ username: 'Balda',   text: 'some #cool hashtag' },
+							{ username: 'Pami',    text: 'other #good hashtag' },
+							{ username: 'Cohen0',  text: '#transducers FTW' },
+							{ username: 'Perotti', text: '#cool' },
+							{ username: 'Zyrko',   text: 'no hashtag' },
+							{ username: 'Novoa',   text: 'What are #transducers ?' }
+						];
+
+						var transducer = compose(...);
+						var append = function(result, input) {...};
+
+						var output = transduce(transducer, append, {}, input);
+						// output = { '#cool': 2, '#good': 1, '#transducers': 2 }
+						```
+					</section>
+
+					<section data-markdown>
+						## Array to Object
+						Counting #hashtags
+
+						```
+						var transducer = compose(
+							filtering(function(tweet) {
+								// Filter tweets with hashtag
+								return tweet.text.match(/#\w+/);
+							}),
+							mapping(function(tweet) {
+								// Return the #hashtag text
+								return tweet.text.match(/#\w+/g)[0];
+							})
+						);
+
+						var append = function(result, input) {
+							result[input] = result[input] || 0;
+							result[input]++;
+							return result;
+						};
+
+						```
+					</section>
+
+				</section>
+
+				<section>
+
+					<section data-markdown>
+						## Generator to Object
+						Counting #hashtags
+
+						```
+						var input = function* () {
+							yield { username: 'Balda',   text: 'some #cool hashtag' };
+							yield { username: 'Pami',    text: 'other #good hashtag' };
+							yield { username: 'Cohen0',  text: '#transducers FTW' };
+							yield { username: 'Perotti', text: '#cool' };
+							yield { username: 'Zyrko',   text: 'no hashtag' };
+							yield { username: 'Novoa',   text: 'What are #transducers ?' };
+						};
+
+						var transducer = compose(...);
+						var append = function(result, input) {...};
+
+						var output = transduce(transducer, append, {}, input());
+						// output = { '#cool': 2, '#good': 1, '#transducers': 2 }
+						```
+					</section>
+
+					<section data-markdown>
+						## Generator to Object
+						Counting #hashtags
+
+						```
+						var transducer = compose(
+							filtering(function(tweet) {
+								// Filter tweets with hashtag
+								return tweet.text.match(/#\w+/);
+							}),
+							mapping(function(tweet) {
+								// Return the #hashtag text
+								return tweet.text.match(/#\w+/g)[0];
+							})
+						);
+
+						var append = function(result, input) {
+							result[input] = result[input] || 0;
+							result[input]++;
+							return result;
+						};
+
+						```
+					</section>
+
+				</section>
+
+				<section>
+
+					<section data-markdown>
+						## Generator to Array
+						Counting #hashtags
+
+						```
+						var input = function* () {
+							yield { username: 'Balda',   text: 'some #cool hashtag' };
+							yield { username: 'Pami',    text: 'other #good hashtag' };
+							yield { username: 'Cohen0',  text: '#transducers FTW' };
+							yield { username: 'Perotti', text: '#cool' };
+							yield { username: 'Zyrko',   text: 'no hashtag' };
+							yield { username: 'Novoa',   text: 'What are #transducers ?' };
+						};
+
+						var transducer = compose(...);
+						var append = function(result, input) {...};
+
+						var output = transduce(transducer, append, [], input());
+						// output = [ ['#cool', 2], ['#good', 1], ['#transducers': 2] ]
+						```
+					</section>
+
+					<section data-markdown>
+						## Generator to Array
+						Counting #hashtags
+
+						```
+						var transducer = compose(
+							filtering(function(tweet) {
+								// Filter tweets with hashtag
+								return tweet.text.match(/#\w+/);
+							}),
+							mapping(function(tweet) {
+								// Return the #hashtag text
+								return tweet.text.match(/#\w+/g)[0];
+							})
+						);
+
+						var append = function(result, hashtag) {
+							var hashtagCount = findByHashtag(hashtag, result);
+							if (!hashtagCount) {
+								hashtagCount = [hashtag, 1];
+								result.push(hashtagCount);
+							} else {
+								hashtagCount[1]++;
+							}
+							return result;
+						};
+
+						```
+					</section>
+
+				</section>
+
+				<section>
+
+				<section data-markdown>
+					## Streams
+					Streaming numbers
+
+					```
+					arrayStream(['1', '2', '3', '4', '5'])
+					  .pipe(new TransduceStream(
+					    compose(
+					      // plus1
+					      mapping(function(x) {
+					        return x + 1;
+					      }),
+					      // isOdd
+					      filtering(function(x) {
+					        return x % 2 === 0;
+					      })
+					    )
+					  ))
+					  .pipe(process.stdout);
+					// streams 2 4 6
+
+					```
+				</section>
+
+				<section data-markdown>
+					## Streams
+					Streaming numbers
+
+					```
+					function arrayStream(source) {
+					  var read = new Readable({
+					    encoding: 'utf8'
+					  });
+					  read._read = function() {
+					    read.push(source.shift());
+					  };
+					  return read;
+					}
+					```
+				</section>
+
+				<section data-markdown>
+					## Streams
+					Streaming numbers
+
+					```
+					util.inherits(TransduceStream, Transform);
+
+					function append(stream, input) {
+					  stream.push(input.toString() + '\n');
+					}
+
+					function TransduceStream(transducer, options) {
+					  Transform.call(this, options);
+					  this._transformXf = transducer(append);
+					}
+
+					TransduceStream.prototype._transform = function(chunk, enc, cb) {
+					  this._transformXf(this, parseInt(chunk, 10));
+					  cb();
+					};
+
+					```
+				</section>
+
+				</section>
+
+				<section>
+					<h1>Conclusion</h1>
+					<p class="fragment">Transducers allow:</p>
+					<ul>
+						<li class="fragment">Expressive transformations</li>
+						<li class="fragment">Composable transformations</li>
+						<li class="fragment">Efficient data processing</li>
+						<li class="fragment">Independence from the input and output data-type</li>
+					</ul>
+
+				</section>
+
+				<section>
+					<h2>Credits</h2>
+					<ul>
+						<li>James Long - http://jlongster.com</li>
+						<li>Tom Ashworth - http://phuu.net</li>
+						<li>Kevin Beaty - http://simplectic.com</li>
+					</ul>
+				</section>
+
+				<section>
+					<blockquote>
+						<p>
+						The most beautiful experience we can have is the mysterious.
+						</p>
+						<p class="fragment">
+						It is the fundamental emotion which stands at the cradle of all true art and science.
+						</p>
+						<p class="fragment">
+						Whoever does not know it and can no longer wonder, no longer marvel, is as good as dead, and his eyes are dimmed.
+						</p>
+					</blockquote>
+					<p class="fragment">Albert Einstein</p>
+				</section>
+
+				<section data-markdown>
+					<script type="text/template">
+						# Thank you
+						## JavaScript Transducers
+
+						by **Matias Volpe**
+
+						@matvolpe
+
+						<a href="http://ar.linkedin.com/in/matiasvolpe">ar.linkedin.com/in/matiasvolpe</a>
+						</br>
+
+						https://github.com/kratico/jsconf-uy-2015
+
+
+					</script>
+				</section>
+
+			</div>
+
+		</div>
+
+		<script src="lib/js/head.min.js"></script>
+		<script src="js/reveal.js"></script>
+
+		<script>
+
+			// Full list of configuration options available at:
+			// https://github.com/hakimel/reveal.js#configuration
+			Reveal.initialize({
+				controls: true,
+				progress: true,
+				history: true,
+				center: true,
+
+				transition: 'slide', // none/fade/slide/convex/concave/zoom
+
+				// Optional reveal.js plugins
+				dependencies: [
+					{ src: 'lib/js/classList.js', condition: function() { return !document.body.classList; } },
+					{ src: 'plugin/markdown/marked.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+					{ src: 'plugin/markdown/markdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+					{ src: 'plugin/highlight/highlight.js', async: true, condition: function() { return !!document.querySelector( 'pre code' ); }, callback: function() { hljs.initHighlightingOnLoad(); } },
+					{ src: 'plugin/zoom-js/zoom.js', async: true },
+					{ src: 'plugin/notes/notes.js', async: true }
+				]
+			});
+
+		</script>
+
+	</body>
+</html>
